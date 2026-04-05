@@ -1,40 +1,90 @@
 import requests
 from bs4 import BeautifulSoup
 
-def run():
-    print("RUN US")
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
+
+# -----------------------------
+# 1. Récupérer articles
+# -----------------------------
+def get_articles(limit=15):
     url = "https://fr.investing.com/news/analyst-ratings"
-    headers = {"User-Agent": "Mozilla/5.0"}
 
-    r = requests.get(url, headers=headers)
+    r = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(r.text, "html.parser")
 
-    links = []
+    ul = soup.find("ul", {"data-test": "news-list"})
 
-    for a in soup.find_all("a"):
-        href = a.get("href", "")
-        if "/news/" in href:
-            links.append("https://www.investing.com" + href)
+    if not ul:
+        print("Liste articles non trouvée")
+        return []
 
-    links = list(set(links))[:10]
+    articles = []
+
+    for li in ul.find_all("li"):
+        a = li.find("a")
+
+        if not a:
+            continue
+
+        href = a.get("href")
+
+        # IMPORTANT : déjà un lien complet
+        if href and href.startswith("http"):
+            articles.append(href)
+
+    # enlever doublons proprement
+    articles = list(dict.fromkeys(articles))
+
+    return articles[:limit]
+
+
+# -----------------------------
+# 2. Récupérer 1er paragraphe
+# -----------------------------
+def get_first_paragraph(url):
+    try:
+        r = requests.get(url, headers=HEADERS)
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        # premier paragraphe réel
+        paragraphs = soup.find_all("p")
+
+        for p in paragraphs:
+            text = p.get_text().strip()
+
+            if len(text) > 50:  # filtre anti bruit
+                return text
+
+    except:
+        return None
+
+    return None
+
+
+# -----------------------------
+# 3. MAIN
+# -----------------------------
+def run():
+    print("=== RUN US ===")
+
+    articles = get_articles(limit=15)
+
+    print(f"{len(articles)} articles trouvés")
 
     texts = []
 
-    for link in links:
-        try:
-            r = requests.get(link, headers=headers)
-            soup = BeautifulSoup(r.text, "html.parser")
+    for article in articles:
+        text = get_first_paragraph(article)
 
-            p = soup.find("p")
-            if p:
-                texts.append(p.get_text())
-        except:
-            continue
+        if text:
+            texts.append(text)
 
     combined = "\n\n".join(texts)
 
-    print(combined[:1000])
+    print("\n=== CONTENU ===\n")
+    print(combined[:2000])
+
 
 if __name__ == "__main__":
     run()
