@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 def run():
     print("RUN US")
 
-    url = "https://www.investing.com/news/stock-market-news"
+    url = "https://fr.investing.com/news/analyst-ratings"
     headers = {"User-Agent": "Mozilla/5.0"}
 
     r = requests.get(url, headers=headers)
