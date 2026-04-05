@@ -1,0 +1,35 @@
+name: Trading Bot
+
+on:
+  schedule:
+    - cron: '30 6 * * 1-5'   # 8h30 CET Europe (UTC+2 -> 6h30 UTC)
+    - cron: '0 13 * * 1-5'   # 15h CET US (UTC+2 -> 13h UTC)
+  workflow_dispatch:          # Pour lancer manuellement
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Europe Bot
+        if: github.event.schedule == '30 6 * * 1-5' || github.event_name == 'workflow_dispatch'
+        run: python main_europe.py
+        env:
+          ROUTE_LLM_API_KEY: ${{ secrets.ROUTE_LLM_API_KEY }}
+
+      - name: Run US Bot
+        if: github.event.schedule == '0 13 * * 1-5' || github.event_name == 'workflow_dispatch'
+        run: python main_us.py
+        env:
+          ROUTE_LLM_API_KEY: ${{ secrets.ROUTE_LLM_API_KEY }}
