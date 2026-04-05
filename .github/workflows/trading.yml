@@ -1,9 +1,9 @@
 name: Trading Bot
 
 on:
-  schedule:
-    - cron: '30 6 * * 1-5'   # 8h30 CET Europe (UTC+2 -> 6h30 UTC)
-    - cron: '0 13 * * 1-5'   # 15h CET US (UTC+2 -> 13h UTC)
+  #schedule:
+    #- cron: '30 6 * * 1-5'   # 8h30 CET Europe (UTC+2 -> 6h30 UTC)
+    #- cron: '0 13 * * 1-5'   # 15h CET US (UTC+2 -> 13h UTC)
   workflow_dispatch:          # Pour lancer manuellement
 
 jobs:
