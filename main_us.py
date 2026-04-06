@@ -236,51 +236,7 @@ def build_ai_input(items):
 def run():
     print("=== RUN US ===")
     send_email("Test", "Hello depuis GitHub Actions")
-
-    articles = get_articles(limit=10)
-    print(f"{len(articles)} articles filtrés trouvés")
-
-    if not articles:
-        print("Aucun article filtré récupéré, arrêt.")
-        return
-
-    collected_items = []
-
-    for i, article_data in enumerate(articles, 1):
-        print(f"[{i}/{len(articles)}] {article_data['title']}")
-        time.sleep(random.uniform(3, 6))
-
-        paragraph = get_first_paragraph(article_data["url"], retries=2)
-        if paragraph:
-            collected_items.append({
-                "title": article_data["title"],
-                "url": article_data["url"],
-                "paragraph": paragraph
-            })
-
-    print("\n=== PARAGRAPHES EXTRAITS ===\n")
-    for i, item in enumerate(collected_items, 1):
-        print(f"[{i}] {item['title']}")
-        print(item["paragraph"])
-        print()
-
-    if not collected_items:
-        print("Aucun contenu récupéré, analyse IA ignorée.")
-        return
-
-    ai_input = build_ai_input(collected_items)
-
-    print("\n=== ANALYSE IA ===\n")
-    result = analyze_trades(ai_input, market="US")
-
-    formatted_result = json.dumps(result, ensure_ascii=False, indent=2)
-    print(formatted_result)
-
-    subject = "Trading Bot US - Analyse IA"
-    body = f"Résultat de l'analyse IA :\n\n{formatted_result}"
-
-    send_email(subject, body)
-
-
+    return
+    
 if __name__ == "__main__":
     run()
