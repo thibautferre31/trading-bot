@@ -1,5 +1,6 @@
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import time
@@ -33,6 +34,7 @@ def create_driver(user_agent=None):
     options.add_experimental_option("useAutomationExtension", False)
 
     driver = webdriver.Chrome(options=options)
+    driver.set_page_load_timeout(45)
 
     driver.execute_cdp_cmd(
         "Page.addScriptToEvaluateOnNewDocument",
@@ -54,13 +56,33 @@ def create_driver(user_agent=None):
     return driver
 
 
+def load_page_with_retry(driver, url, retries=2, min_sleep=4, max_sleep=7):
+    for attempt in range(1, retries + 1):
+        try:
+            driver.get(url)
+            time.sleep(random.uniform(min_sleep, max_sleep))
+            return True
+        except TimeoutException:
+            print(f"Timeout chargement ({attempt}/{retries}) : {url}")
+        except WebDriverException as e:
+            print(f"WebDriverException ({attempt}/{retries}) sur {url}: {e}")
+
+        if attempt < retries:
+            time.sleep(random.uniform(3, 6))
+
+    return False
+
+
 def get_articles(limit=15):
     driver = create_driver()
 
     try:
         url = "https://fr.investing.com/news/analyst-ratings"
-        driver.get(url)
-        time.sleep(random.uniform(4, 7))
+        ok = load_page_with_retry(driver, url, retries=2, min_sleep=4, max_sleep=7)
+
+        if not ok:
+            print("Impossible de charger la page liste des articles")
+            return []
 
         soup = BeautifulSoup(driver.page_source, "html.parser")
 
@@ -127,34 +149,43 @@ def extract_first_real_paragraph(html):
     return None
 
 
-def get_first_paragraph(url):
+def get_first_paragraph(url, retries=2):
     user_agent = random.choice(USER_AGENTS)
-    driver = create_driver(user_agent=user_agent)
 
-    try:
-        print(f"Article : {url}")
-        print(f"User-Agent : {user_agent}")
+    for attempt in range(1, retries + 1):
+        driver = create_driver(user_agent=user_agent)
 
-        time.sleep(random.uniform(2, 5))
-        driver.get(url)
-        time.sleep(random.uniform(6, 10))
+        try:
+            print(f"Article : {url}")
+            print(f"User-Agent : {user_agent}")
+            print(f"Tentative : {attempt}/{retries}")
 
-        html = driver.page_source
-        text = extract_first_real_paragraph(html)
+            time.sleep(random.uniform(2, 5))
 
-        if text:
-            return text
+            ok = load_page_with_retry(driver, url, retries=1, min_sleep=6, max_sleep=10)
+            if not ok:
+                print("Chargement article échoué")
+                continue
 
-        print("Anti-bot détecté ou paragraphe introuvable")
-        print(html[:2000])
-        return None
+            html = driver.page_source
+            text = extract_first_real_paragraph(html)
 
-    except Exception as e:
-        print(f"Erreur sur {url}: {e}")
-        return None
+            if text:
+                return text
 
-    finally:
-        driver.quit()
+            print("Anti-bot détecté ou paragraphe introuvable")
+            print(html[:2000])
+
+        except Exception as e:
+            print(f"Erreur sur {url}: {e}")
+
+        finally:
+            driver.quit()
+
+        if attempt < retries:
+            time.sleep(random.uniform(3, 6))
+
+    return None
 
 
 def run():
@@ -163,11 +194,15 @@ def run():
     articles = get_articles(limit=15)
     print(f"{len(articles)} articles trouvés")
 
+    if not articles:
+        print("Aucun article récupéré, arrêt.")
+        return
+
     texts = []
     for i, article in enumerate(articles, 1):
         print(f"[{i}/{len(articles)}]")
         time.sleep(random.uniform(3, 6))
-        text = get_first_paragraph(article)
+        text = get_first_paragraph(article, retries=2)
         if text:
             texts.append(text)
 
