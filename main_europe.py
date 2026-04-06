@@ -1,13 +1,12 @@
 import time
 import random
-from difflib import SequenceMatcher
+import re
+import unicodedata
 
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-
-from ai import analyze_trades
 
 
 USER_AGENTS = [
@@ -76,6 +75,19 @@ def load_page_with_selenium(url, label="", wait_range=(3, 5)):
             driver.quit()
 
 
+def slugify_title(title):
+    text = title.strip().lower()
+
+    text = unicodedata.normalize("NFKD", text)
+    text = text.encode("ascii", "ignore").decode("ascii")
+
+    text = re.sub(r"[^\w\s-]", "", text)
+    text = re.sub(r"[\s_]+", "-", text)
+    text = re.sub(r"-+", "-", text)
+
+    return text.strip("-")
+
+
 # -----------------------------
 # 1. Récupérer le titre ivoox
 # -----------------------------
@@ -100,109 +112,63 @@ def get_chronique_title():
 
 
 # -----------------------------
-# 2. Similarité
+# 2. Trouver l'article Zonebourse via slug
 # -----------------------------
-def similar(a, b):
-    return SequenceMatcher(None, a, b).ratio()
+def find_zonebourse_article_by_slug(title):
+    slug = slugify_title(title)
+    print("Slug recherché :", slug)
 
-
-# -----------------------------
-# 3. Trouver article Zonebourse
-# -----------------------------
-def find_zonebourse_article(title):
-    url = "https://www.zonebourse.com/actualite-bourse/"
-    html = load_page_with_selenium(url, label="zonebourse liste", wait_range=(4, 6))
+    url = "https://www.zonebourse.com/auteur/anthony-bondain"
+    html = load_page_with_selenium(url, label="zonebourse auteur", wait_range=(4, 6))
 
     if not html:
-        print("Impossible de charger la page liste Zonebourse")
+        print("Impossible de charger la page auteur Zonebourse")
         return None
 
     soup = BeautifulSoup(html, "html.parser")
 
-    table = soup.find("table", {"id": "newsScreener"})
-    if not table:
-        print("Table newsScreener non trouvée")
+    grid = soup.find("div", class_="grid")
+    if not grid:
+        print("Div grid introuvable")
         return None
 
-    tbody = table.find("tbody")
-    if not tbody:
-        print("tbody non trouvé")
-        return None
+    cards = grid.find_all("div", class_="c-12 cs-6 cxxl-4  mb-15")
+    print(f"Nombre de cards trouvées : {len(cards)}")
 
-    best_link = None
-    best_score = 0
-    best_text = None
-
-    for tr in tbody.find_all("tr"):
-        a_tag = tr.find("a")
+    for i, card in enumerate(cards, start=1):
+        a_tag = card.find("a", href=True)
         if not a_tag:
             continue
 
-        text = a_tag.get_text(strip=True)
-        href = a_tag.get("href")
+        href = a_tag["href"].strip()
+        print(f"[{i}] href = {href}")
 
-        if not text or not href:
-            continue
+        if slug in href:
+            full_url = "https://www.zonebourse.com" + href
+            print("Article trouvé :", full_url)
+            return full_url
 
-        score = similar(title.lower(), text.lower())
-
-        if score > best_score:
-            best_score = score
-            best_link = href
-            best_text = text
-
-    if best_link and best_score > 0.4:
-        full_url = "https://www.zonebourse.com" + best_link
-        print(f"Meilleur match Zonebourse (score {best_score:.2f}) : {best_text}")
-        print("URL :", full_url)
-        return full_url
-
-    print("Aucun article Zonebourse trouvé")
+    print("Aucun article correspondant au slug n'a été trouvé")
     return None
 
 
 # -----------------------------
-# 4. Extraire recommandations
-# -----------------------------
-def extract_recommendations(article_url):
-    html = load_page_with_selenium(article_url, label="article zonebourse", wait_range=(4, 6))
-
-    if not html:
-        print("Impossible de charger l'article Zonebourse")
-        return None
-
-    soup = BeautifulSoup(html, "html.parser")
-
-    for u in soup.find_all("u"):
-        text = u.get_text(" ", strip=True).lower()
-
-        if "changements de recommandations" in text:
-            ul = u.find_next("ul")
-
-            if ul:
-                items = ul.find_all("li")
-                recos = []
-
-                for li in items:
-                    txt = li.get_text(" ", strip=True)
-                    if txt:
-                        recos.append(txt)
-
-                if recos:
-                    return recos
-
-    print("Section recommandations non trouvée")
-    return None
-
-
-# -----------------------------
-# 5. MAIN
+# 3. MAIN TEST
 # -----------------------------
 def run():
-    print("=== TEST TITRE IVOOX ===")
+    print("=== RUN EUROPE TEST SLUG ===")
 
     title = get_chronique_title()
-    print("Résultat final :", title)
+    if not title:
+        print("Erreur titre")
+        return
+
+    article_url = find_zonebourse_article_by_slug(title)
+    if not article_url:
+        print("Erreur article")
+        return
+
+    print("URL finale article :", article_url)
 
 
 if __name__ == "__main__":
