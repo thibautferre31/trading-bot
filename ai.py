@@ -81,7 +81,7 @@ RÈGLES IMPORTANTES :
     }
 
     try:
-        response = requests.post(URL, headers=headers, data=json.dumps(payload), timeout=30)
+        response = requests.post(URL, headers=headers, data=json.dumps(payload), timeout=180)
         data = response.json()
 
         content = data["choices"][0]["message"]["content"].strip()
