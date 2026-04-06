@@ -199,32 +199,10 @@ def extract_recommendations(article_url):
 # 5. MAIN
 # -----------------------------
 def run():
-    print("=== RUN EUROPE ===")
+    print("=== TEST TITRE IVOOX ===")
 
     title = get_chronique_title()
-    if not title:
-        print("Erreur titre")
-        return
-
-    article_url = find_zonebourse_article(title)
-    if not article_url:
-        print("Erreur article Zonebourse")
-        return
-
-    recommendations = extract_recommendations(article_url)
-    if not recommendations:
-        print("Erreur recommandations")
-        return
-
-    print("\n=== RECOMMANDATIONS ===")
-    for i, reco in enumerate(recommendations, start=1):
-        print(f"[{i}] {reco}")
-
-    text_for_ai = "\n".join(recommendations)
-
-    print("\n=== ANALYSE IA ===")
-    trades = analyze_trades(text_for_ai)
-    print(trades)
+    print("Résultat final :", title)
 
 
 if __name__ == "__main__":
