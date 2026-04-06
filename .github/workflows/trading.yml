@@ -1,6 +1,8 @@
 name: Trading Bot US Test
 
 on:
+  schedule:
+    - cron: "0 13 * * *"
   workflow_dispatch:
 
 jobs:
