@@ -127,31 +127,48 @@ def find_zonebourse_article_by_slug(title):
 
     soup = BeautifulSoup(html, "html.parser")
 
-    grid = soup.find("div", class_="grid")
-    if not grid:
-        print("Div grid introuvable")
+    all_grids = soup.find_all("div", class_="grid")
+    print(f"Nombre de div.grid trouvées : {len(all_grids)}")
+
+    target_grid = None
+
+    for idx, grid in enumerate(all_grids, start=1):
+        cards = grid.find_all(
+            "div",
+            class_=lambda c: c and all(cls in c.split() for cls in ["c-12", "cs-6", "cxxl-4", "mb-15"])
+        )
+
+        print(f"Grid #{idx} -> {len(cards)} cards potentielles")
+
+        if cards:
+            target_grid = grid
+            break
+
+    if target_grid is None:
+        print("Aucune grid contenant des cards d'articles trouvée")
         return None
 
-    links = grid.find_all("a", href=True)
-    print(f"Nombre de liens trouvés dans grid : {len(links)}")
+    cards = target_grid.find_all(
+        "div",
+        class_=lambda c: c and all(cls in c.split() for cls in ["c-12", "cs-6", "cxxl-4", "mb-15"])
+    )
 
-    candidates = []
+    print(f"Nombre de cards trouvées dans la bonne grid : {len(cards)}")
 
-    for i, a_tag in enumerate(links, start=1):
+    for i, card in enumerate(cards, start=1):
+        a_tag = card.find("a", href=True)
+        if not a_tag:
+            continue
+
         href = a_tag["href"].strip()
         text = a_tag.get_text(" ", strip=True)
 
-        if "/actualite-bourse/" in href:
+        print(f"[{i}] href = {href}")
+        if text:
+            print(f"    texte = {text}")
+
+        if "/actualite-bourse/" in href and slug in href:
             full_url = "https://www.zonebourse.com" + href
-            candidates.append((href, text, full_url))
-            print(f"[{len(candidates)}] href = {href}")
-            if text:
-                print(f"    texte = {text}")
-
-    print(f"Nombre de liens /actualite-bourse/ trouvés : {len(candidates)}")
-
-    for href, text, full_url in candidates:
-        if slug in href:
             print("Article trouvé :", full_url)
             return full_url
 
