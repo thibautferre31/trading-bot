@@ -29,3 +29,8 @@ jobs:
         run: python main_us.py
         env:
           ROUTE_LLM_API_KEY: ${{ secrets.ROUTE_LLM_API_KEY }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_SENDER: ${{ secrets.SMTP_SENDER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_RECIPIENT: ${{ secrets.SMTP_RECIPIENT }}
