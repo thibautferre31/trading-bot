@@ -9,6 +9,7 @@ import re
 import json
 
 from ai import analyze_trades
+from email_utils import send_email
 
 BASE_URL = "https://fr.investing.com"
 LIST_URL = "https://fr.investing.com/news/analyst-ratings"
