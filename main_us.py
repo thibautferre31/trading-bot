@@ -1,24 +1,38 @@
-import requests
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+import time
 
 BASE_URL = "https://fr.investing.com"
-HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
-# -----------------------------
-# 1. Récupérer articles (tous ceux de la page)
-# -----------------------------
-def get_articles(limit=None):
+def create_driver():
+    options = Options()
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument(
+        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    )
+
+    driver = webdriver.Chrome(options=options)
+    return driver
+
+
+def get_articles(driver, limit=None):
     url = "https://fr.investing.com/news/analyst-ratings"
+    driver.get(url)
+    time.sleep(5)
 
-    r = requests.get(url, headers=HEADERS)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, "html.parser")
+    soup = BeautifulSoup(driver.page_source, "html.parser")
 
     ul = soup.find("ul", {"data-test": "news-list"})
     if not ul:
         print("Liste articles non trouvée")
+        print(driver.page_source[:3000])
         return []
 
     articles = []
@@ -28,10 +42,9 @@ def get_articles(limit=None):
             continue
 
         href = a["href"].strip()
-        full_url = urljoin(BASE_URL, href)  # gère href relatifs ou absolus
+        full_url = urljoin(BASE_URL, href)
         articles.append(full_url)
 
-    # enlever doublons proprement en gardant l'ordre
     articles = list(dict.fromkeys(articles))
 
     if limit is not None:
@@ -39,45 +52,47 @@ def get_articles(limit=None):
     return articles
 
 
-# -----------------------------
-# 2. Récupérer 1er paragraphe (sans filtre 50 caractères)
-# -----------------------------
-def get_first_paragraph(url):
+def get_first_paragraph(driver, url):
     try:
-        r = requests.get(url, headers=HEADERS)
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
+        driver.get(url)
+        time.sleep(3)
+
+        soup = BeautifulSoup(driver.page_source, "html.parser")
 
         for p in soup.find_all("p"):
             text = p.get_text(" ", strip=True)
-            if text:  # premier paragraphe non vide
+            if text:
                 return text
 
-    except Exception:
+    except Exception as e:
+        print(f"Erreur sur {url}: {e}")
         return None
 
     return None
 
 
-# -----------------------------
-# 3. MAIN
-# -----------------------------
 def run():
     print("=== RUN US ===")
+    driver = create_driver()
 
-    articles = get_articles(limit=None)  # tous les liens de la page
-    print(f"{len(articles)} articles trouvés")
+    try:
+        articles = get_articles(driver, limit=5)
+        print(f"{len(articles)} articles trouvés")
 
-    texts = []
-    for article in articles:
-        text = get_first_paragraph(article)
-        if text:
-            texts.append(text)
+        texts = []
+        for article in articles:
+            print("Article :", article)
+            text = get_first_paragraph(driver, article)
+            if text:
+                texts.append(text)
 
-    combined = "\n\n".join(texts)
+        combined = "\n\n".join(texts)
 
-    print("\n=== CONTENU ===\n")
-    print(combined[:2000])
+        print("\n=== CONTENU ===\n")
+        print(combined[:2000])
+
+    finally:
+        driver.quit()
 
 
 if __name__ == "__main__":
