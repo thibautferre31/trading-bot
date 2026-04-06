@@ -132,19 +132,26 @@ def find_zonebourse_article_by_slug(title):
         print("Div grid introuvable")
         return None
 
-    cards = grid.find_all("div", class_="c-12 cs-6 cxxl-4  mb-15")
-    print(f"Nombre de cards trouvées : {len(cards)}")
+    links = grid.find_all("a", href=True)
+    print(f"Nombre de liens trouvés dans grid : {len(links)}")
 
-    for i, card in enumerate(cards, start=1):
-        a_tag = card.find("a", href=True)
-        if not a_tag:
-            continue
+    candidates = []
 
+    for i, a_tag in enumerate(links, start=1):
         href = a_tag["href"].strip()
-        print(f"[{i}] href = {href}")
+        text = a_tag.get_text(" ", strip=True)
 
-        if slug in href:
+        if "/actualite-bourse/" in href:
             full_url = "https://www.zonebourse.com" + href
+            candidates.append((href, text, full_url))
+            print(f"[{len(candidates)}] href = {href}")
+            if text:
+                print(f"    texte = {text}")
+
+    print(f"Nombre de liens /actualite-bourse/ trouvés : {len(candidates)}")
+
+    for href, text, full_url in candidates:
+        if slug in href:
             print("Article trouvé :", full_url)
             return full_url
 
