@@ -1,6 +1,5 @@
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import time
@@ -19,8 +18,9 @@ USER_AGENTS = [
 ]
 
 
-def create_driver():
-    user_agent = random.choice(USER_AGENTS)
+def create_driver(user_agent=None):
+    if user_agent is None:
+        user_agent = random.choice(USER_AGENTS)
 
     options = Options()
     options.add_argument("--headless=new")
@@ -51,35 +51,40 @@ def create_driver():
         },
     )
 
-    print(f"User-Agent session : {user_agent}")
     return driver
 
 
-def get_articles(driver, limit=15):
-    url = "https://fr.investing.com/news/analyst-ratings"
-    driver.get(url)
-    time.sleep(4)
+def get_articles(limit=15):
+    driver = create_driver()
 
-    soup = BeautifulSoup(driver.page_source, "html.parser")
+    try:
+        url = "https://fr.investing.com/news/analyst-ratings"
+        driver.get(url)
+        time.sleep(random.uniform(4, 7))
 
-    ul = soup.find("ul", {"data-test": "news-list"})
-    if not ul:
-        print("Liste articles non trouvée")
-        print(driver.page_source[:3000])
-        return []
+        soup = BeautifulSoup(driver.page_source, "html.parser")
 
-    articles = []
-    for li in ul.find_all("li"):
-        a = li.find("a", href=True)
-        if not a:
-            continue
+        ul = soup.find("ul", {"data-test": "news-list"})
+        if not ul:
+            print("Liste articles non trouvée")
+            print(driver.page_source[:3000])
+            return []
 
-        href = a["href"].strip()
-        full_url = urljoin(BASE_URL, href)
-        articles.append(full_url)
+        articles = []
+        for li in ul.find_all("li"):
+            a = li.find("a", href=True)
+            if not a:
+                continue
 
-    articles = list(dict.fromkeys(articles))
-    return articles[:limit]
+            href = a["href"].strip()
+            full_url = urljoin(BASE_URL, href)
+            articles.append(full_url)
+
+        articles = list(dict.fromkeys(articles))
+        return articles[:limit]
+
+    finally:
+        driver.quit()
 
 
 def extract_first_real_paragraph(html):
@@ -122,16 +127,17 @@ def extract_first_real_paragraph(html):
     return None
 
 
-def get_first_paragraph(driver, url):
+def get_first_paragraph(url):
+    user_agent = random.choice(USER_AGENTS)
+    driver = create_driver(user_agent=user_agent)
+
     try:
         print(f"Article : {url}")
+        print(f"User-Agent : {user_agent}")
+
+        time.sleep(random.uniform(2, 5))
         driver.get(url)
-
-        WebDriverWait(driver, 10).until(
-            lambda d: "article" in d.page_source.lower()
-        )
-
-        time.sleep(1.5)
+        time.sleep(random.uniform(6, 10))
 
         html = driver.page_source
         text = extract_first_real_paragraph(html)
@@ -147,35 +153,36 @@ def get_first_paragraph(driver, url):
         print(f"Erreur sur {url}: {e}")
         return None
 
+    finally:
+        driver.quit()
+
 
 def run():
     print("=== RUN US ===")
-    driver = create_driver()
 
-    try:
-        articles = get_articles(driver, limit=15)
-        print(f"{len(articles)} articles trouvés")
+    articles = get_articles(limit=15)
+    print(f"{len(articles)} articles trouvés")
 
-        texts = []
-        for i, article in enumerate(articles, 1):
-            print(f"[{i}/{len(articles)}]")
-            text = get_first_paragraph(driver, article)
-            if text:
-                texts.append(text)
+    texts = []
+    for i, article in enumerate(articles, 1):
+        print(f"[{i}/{len(articles)}]")
+        time.sleep(random.uniform(3, 6))
+        text = get_first_paragraph(article)
+        if text:
+            texts.append(text)
 
-            time.sleep(random.uniform(1.5, 3))
+    combined = "\n\n".join(texts)
 
-        combined = "\n\n".join(texts)
+    print("\n=== CONTENU ===\n")
+    print(combined[:6000])
 
-        print("\n=== CONTENU ===\n")
-        print(combined[:4000])
+    if not combined.strip():
+        print("\nAucun contenu récupéré, analyse IA ignorée.")
+        return
 
-        print("\n=== ANALYSE IA ===\n")
-        result = analyze_trades(combined, market="US")
-        print(result)
-
-    finally:
-        driver.quit()
+    print("\n=== ANALYSE IA ===\n")
+    result = analyze_trades(combined, market="US")
+    print(result)
 
 
 if __name__ == "__main__":
