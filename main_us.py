@@ -102,11 +102,25 @@ def extract_first_real_paragraph(html):
         if marker in full_text:
             return None
 
-    for p in soup.find_all("p"):
-        text = p.get_text(" ", strip=True)
-        if text and len(text) > 40:
-            return text
+    article_div = soup.find("div", id="article")
+    if not article_div:
+        print("div#article non trouvée")
+        return None
 
+    paragraphs = article_div.find_all("p")
+
+    for p in paragraphs:
+        text = p.get_text(" ", strip=True)
+
+        if not text:
+            continue
+
+        if len(text) < 40:
+            continue
+
+        return text
+
+    print("Aucun paragraphe valide trouvé dans div#article")
     return None
 
 
