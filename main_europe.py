@@ -1,18 +1,26 @@
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import TimeoutException, WebDriverException
+from bs4 import BeautifulSoup
 import time
 import random
 import re
+import json
 import unicodedata
 
-from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
+from ai import analyze_trades
+from email_utils import send_email
 
+
+IVOX_URL = "https://www.ivoox.com/en/podcast-chronique-finance_sq_f11172576_1.html"
+ZONEBOURSE_AUTHOR_URL = "https://www.zonebourse.com/auteur/anthony-bondain"
+BASE_URL = "https://www.zonebourse.com"
 
 USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
 ]
 
 
@@ -27,160 +35,229 @@ def create_driver(user_agent=None):
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1920,1080")
     options.add_argument(f"--user-agent={user_agent}")
-    options.add_argument("--disable-blink-features=AutomationControlled")
 
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
 
-    service = Service("/usr/bin/chromedriver")
-    driver = webdriver.Chrome(service=service, options=options)
-    driver.set_page_load_timeout(30)
+    driver = webdriver.Chrome(options=options)
+    driver.set_page_load_timeout(45)
 
-    driver.execute_script(
-        """
-        Object.defineProperty(navigator, 'webdriver', {
-            get: () => undefined
-        })
-        """
+    driver.execute_cdp_cmd(
+        "Page.addScriptToEvaluateOnNewDocument",
+        {
+            "source": """
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['fr-FR', 'fr', 'en-US', 'en']
+                });
+                Object.defineProperty(navigator, 'platform', {
+                    get: () => 'Win32'
+                });
+            """
+        },
     )
 
     return driver
 
 
-def load_page_with_selenium(url, label="", wait_range=(3, 5)):
-    driver = None
-    try:
-        user_agent = random.choice(USER_AGENTS)
-        print(f"Ouverture {label}: {url}")
-        print(f"User-Agent : {user_agent}")
+def load_page_with_retry(driver, url, retries=2, min_sleep=4, max_sleep=7):
+    for attempt in range(1, retries + 1):
+        try:
+            driver.get(url)
+            time.sleep(random.uniform(min_sleep, max_sleep))
+            return True
+        except TimeoutException:
+            print(f"Timeout chargement ({attempt}/{retries}) : {url}")
+        except WebDriverException as e:
+            print(f"WebDriverException ({attempt}/{retries}) sur {url}: {e}")
 
-        driver = create_driver(user_agent=user_agent)
-        driver.get(url)
+        if attempt < retries:
+            time.sleep(random.uniform(3, 6))
 
-        time.sleep(random.uniform(*wait_range))
-        html = driver.page_source
-
-        if not html or len(html) < 500:
-            print(f"HTML trop court pour {label}")
-            return None
-
-        return html
-
-    except Exception as e:
-        print(f"Erreur Selenium sur {label}: {e}")
-        return None
-
-    finally:
-        if driver:
-            driver.quit()
+    return False
 
 
 def slugify_title(title):
     text = title.strip().lower()
-
     text = unicodedata.normalize("NFKD", text)
     text = text.encode("ascii", "ignore").decode("ascii")
-
     text = re.sub(r"[^\w\s-]", "", text)
     text = re.sub(r"[\s_]+", "-", text)
     text = re.sub(r"-+", "-", text)
-
     return text.strip("-")
 
 
-# -----------------------------
-# 1. Récupérer le titre ivoox
-# -----------------------------
 def get_chronique_title():
-    url = "https://www.ivoox.com/en/podcast-chronique-finance_sq_f11172576_1.html"
-    html = load_page_with_selenium(url, label="ivoox", wait_range=(3, 5))
+    driver = create_driver()
 
-    if not html:
-        print("Impossible de charger ivoox")
-        return None
+    try:
+        ok = load_page_with_retry(driver, IVOX_URL, retries=2, min_sleep=4, max_sleep=7)
+        if not ok:
+            print("Impossible de charger la page Ivoox")
+            return None
 
-    soup = BeautifulSoup(html, "html.parser")
-    h3 = soup.find("h3")
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+        h3 = soup.find("h3")
 
-    if h3:
-        title = h3.get_text(strip=True)
-        print("Titre ivoox :", title)
+        if not h3:
+            print("Titre Ivoox introuvable")
+            print(driver.page_source[:3000])
+            return None
+
+        title = h3.get_text(" ", strip=True)
+        print("Titre Ivoox :", title)
         return title
 
-    print("Titre ivoox introuvable")
-    return None
+    finally:
+        driver.quit()
 
 
-# -----------------------------
-# 2. Trouver l'article Zonebourse via slug
-# -----------------------------
 def find_zonebourse_article_by_slug(title):
     slug = slugify_title(title)
     print("Slug recherché :", slug)
 
-    url = "https://www.zonebourse.com/auteur/anthony-bondain"
-    html = load_page_with_selenium(url, label="zonebourse auteur", wait_range=(4, 6))
+    driver = create_driver()
 
-    if not html:
-        print("Impossible de charger la page auteur Zonebourse")
-        return None
+    try:
+        ok = load_page_with_retry(driver, ZONEBOURSE_AUTHOR_URL, retries=2, min_sleep=4, max_sleep=7)
+        if not ok:
+            print("Impossible de charger la page auteur Zonebourse")
+            return None
 
-    soup = BeautifulSoup(html, "html.parser")
+        soup = BeautifulSoup(driver.page_source, "html.parser")
 
-    all_grids = soup.find_all("div", class_="grid")
-    print(f"Nombre de div.grid trouvées : {len(all_grids)}")
+        all_grids = soup.find_all("div", class_="grid")
+        print(f"Nombre de div.grid trouvées : {len(all_grids)}")
 
-    target_grid = None
+        target_grid = None
 
-    for idx, grid in enumerate(all_grids, start=1):
-        cards = grid.find_all(
+        for idx, grid in enumerate(all_grids, start=1):
+            cards = grid.find_all(
+                "div",
+                class_=lambda c: c and all(cls in c.split() for cls in ["c-12", "cs-6", "cxxl-4", "mb-15"])
+            )
+            print(f"Grid #{idx} -> {len(cards)} cards potentielles")
+
+            if cards:
+                target_grid = grid
+                break
+
+        if target_grid is None:
+            print("Aucune grid contenant des cards d'articles trouvée")
+            print(driver.page_source[:5000])
+            return None
+
+        cards = target_grid.find_all(
             "div",
             class_=lambda c: c and all(cls in c.split() for cls in ["c-12", "cs-6", "cxxl-4", "mb-15"])
         )
 
-        print(f"Grid #{idx} -> {len(cards)} cards potentielles")
+        print(f"Nombre de cards trouvées dans la bonne grid : {len(cards)}")
 
-        if cards:
-            target_grid = grid
-            break
+        for i, card in enumerate(cards, start=1):
+            a_tag = card.find("a", href=True)
+            if not a_tag:
+                continue
 
-    if target_grid is None:
-        print("Aucune grid contenant des cards d'articles trouvée")
+            href = a_tag["href"].strip()
+            text = a_tag.get_text(" ", strip=True)
+
+            print(f"[{i}] href = {href}")
+            if text:
+                print(f"    texte = {text}")
+
+            if "/actualite-bourse/" in href and slug in href:
+                full_url = BASE_URL + href
+                print("Article trouvé :", full_url)
+                return full_url
+
+        print("Aucun article correspondant au slug n'a été trouvé")
         return None
 
-    cards = target_grid.find_all(
-        "div",
-        class_=lambda c: c and all(cls in c.split() for cls in ["c-12", "cs-6", "cxxl-4", "mb-15"])
-    )
-
-    print(f"Nombre de cards trouvées dans la bonne grid : {len(cards)}")
-
-    for i, card in enumerate(cards, start=1):
-        a_tag = card.find("a", href=True)
-        if not a_tag:
-            continue
-
-        href = a_tag["href"].strip()
-        text = a_tag.get_text(" ", strip=True)
-
-        print(f"[{i}] href = {href}")
-        if text:
-            print(f"    texte = {text}")
-
-        if "/actualite-bourse/" in href and slug in href:
-            full_url = "https://www.zonebourse.com" + href
-            print("Article trouvé :", full_url)
-            return full_url
-
-    print("Aucun article correspondant au slug n'a été trouvé")
-    return None
+    finally:
+        driver.quit()
 
 
-# -----------------------------
-# 3. MAIN TEST
-# -----------------------------
+def extract_recommendations(article_url):
+    driver = create_driver()
+
+    try:
+        ok = load_page_with_retry(driver, article_url, retries=2, min_sleep=5, max_sleep=8)
+        if not ok:
+            print("Impossible de charger l'article Zonebourse")
+            return None
+
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+
+        target_u = None
+        for u in soup.find_all("u"):
+            txt = u.get_text(" ", strip=True).lower()
+            if "les principaux changements de recommandations" in txt:
+                target_u = u
+                break
+
+        if target_u is None:
+            print("Titre de section recommandations introuvable")
+            print(driver.page_source[:5000])
+            return None
+
+        current = target_u
+        ul = None
+
+        while current:
+            current = current.find_next()
+            if current is None:
+                break
+
+            if getattr(current, "name", None) == "ul":
+                ul = current
+                break
+
+            if getattr(current, "name", None) == "p":
+                break
+
+        if ul is None:
+            print("Liste <ul> introuvable après la section recommandations")
+            return None
+
+        items = ul.find_all("li")
+        recommendations = []
+
+        for li in items:
+            txt = li.get_text(" ", strip=True)
+            txt = re.sub(r"\s+", " ", txt).strip()
+            if txt:
+                recommendations.append(txt)
+
+        if not recommendations:
+            print("Aucune recommandation trouvée dans la liste")
+            return None
+
+        print(f"Nombre de recommandations extraites : {len(recommendations)}")
+        return recommendations
+
+    finally:
+        driver.quit()
+
+
+def build_ai_input(title, article_url, recommendations):
+    blocks = []
+    for i, reco in enumerate(recommendations, 1):
+        block = (
+            f"ARTICLE {i}\n"
+            f"TITRE: {title}\n"
+            f"URL: {article_url}\n"
+            f"PARAGRAPHE: {reco}"
+        )
+        blocks.append(block)
+
+    return "\n\n".join(blocks)
+
+
 def run():
-    print("=== RUN EUROPE TEST SLUG ===")
+    print("=== RUN EUROPE ===")
 
     title = get_chronique_title()
     if not title:
@@ -189,10 +266,30 @@ def run():
 
     article_url = find_zonebourse_article_by_slug(title)
     if not article_url:
-        print("Erreur article")
+        print("Erreur article Zonebourse")
         return
 
-    print("URL finale article :", article_url)
+    recommendations = extract_recommendations(article_url)
+    if not recommendations:
+        print("Erreur recommandations")
+        return
+
+    print("\n=== RECOMMANDATIONS EXTRAITES ===\n")
+    for i, reco in enumerate(recommendations, 1):
+        print(f"[{i}] {reco}")
+
+    ai_input = build_ai_input(title, article_url, recommendations)
+
+    print("\n=== ANALYSE IA ===\n")
+    result = analyze_trades(ai_input, market="EUROPE")
+
+    formatted_result = json.dumps(result, ensure_ascii=False, indent=2)
+    print(formatted_result)
+
+    subject = "Trading Bot Europe - Analyse IA"
+    body = f"Résultat de l'analyse IA :\n\n{formatted_result}"
+
+    send_email(subject, body)
 
 
 if __name__ == "__main__":
