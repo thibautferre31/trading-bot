@@ -6,10 +6,12 @@ from urllib.parse import urljoin
 import time
 import random
 import re
+import json
 
 from ai import analyze_trades
 
 BASE_URL = "https://fr.investing.com"
+LIST_URL = "https://fr.investing.com/news/analyst-ratings"
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -17,6 +19,8 @@ USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
 ]
+
+KEYWORDS = ["relève", "releve", "abaisse", "dégrade", "degrade", "réduit", "reduit"]
 
 
 def create_driver(user_agent=None):
@@ -73,12 +77,16 @@ def load_page_with_retry(driver, url, retries=2, min_sleep=4, max_sleep=7):
     return False
 
 
-def get_articles(limit=15):
+def title_matches(title):
+    title_lower = title.lower()
+    return any(keyword in title_lower for keyword in KEYWORDS)
+
+
+def get_articles(limit=10):
     driver = create_driver()
 
     try:
-        url = "https://fr.investing.com/news/analyst-ratings"
-        ok = load_page_with_retry(driver, url, retries=2, min_sleep=4, max_sleep=7)
+        ok = load_page_with_retry(driver, LIST_URL, retries=2, min_sleep=4, max_sleep=7)
 
         if not ok:
             print("Impossible de charger la page liste des articles")
@@ -93,17 +101,39 @@ def get_articles(limit=15):
             return []
 
         articles = []
+        seen_urls = set()
+
         for li in ul.find_all("li"):
             a = li.find("a", href=True)
             if not a:
                 continue
 
+            title = a.get_text(" ", strip=True)
             href = a["href"].strip()
             full_url = urljoin(BASE_URL, href)
-            articles.append(full_url)
 
-        articles = list(dict.fromkeys(articles))
-        return articles[:limit]
+            if not title:
+                continue
+
+            if full_url in seen_urls:
+                continue
+
+            if not title_matches(title):
+                continue
+
+            seen_urls.add(full_url)
+            articles.append({
+                "title": title,
+                "url": full_url
+            })
+
+            print(f"Article retenu : {title}")
+            print(f"URL : {full_url}")
+
+            if len(articles) >= limit:
+                break
+
+        return articles
 
     finally:
         driver.quit()
@@ -188,36 +218,60 @@ def get_first_paragraph(url, retries=2):
     return None
 
 
+def build_ai_input(items):
+    blocks = []
+    for i, item in enumerate(items, 1):
+        block = (
+            f"ARTICLE {i}\n"
+            f"TITRE: {item['title']}\n"
+            f"URL: {item['url']}\n"
+            f"PARAGRAPHE: {item['paragraph']}"
+        )
+        blocks.append(block)
+
+    return "\n\n".join(blocks)
+
+
 def run():
     print("=== RUN US ===")
 
-    articles = get_articles(limit=15)
-    print(f"{len(articles)} articles trouvés")
+    articles = get_articles(limit=10)
+    print(f"{len(articles)} articles filtrés trouvés")
 
     if not articles:
-        print("Aucun article récupéré, arrêt.")
+        print("Aucun article filtré récupéré, arrêt.")
         return
 
-    texts = []
-    for i, article in enumerate(articles, 1):
-        print(f"[{i}/{len(articles)}]")
+    collected_items = []
+
+    for i, article_data in enumerate(articles, 1):
+        print(f"[{i}/{len(articles)}] {article_data['title']}")
         time.sleep(random.uniform(3, 6))
-        text = get_first_paragraph(article, retries=2)
-        if text:
-            texts.append(text)
 
-    combined = "\n\n".join(texts)
+        paragraph = get_first_paragraph(article_data["url"], retries=2)
+        if paragraph:
+            collected_items.append({
+                "title": article_data["title"],
+                "url": article_data["url"],
+                "paragraph": paragraph
+            })
 
-    print("\n=== CONTENU ===\n")
-    print(combined[:6000])
+    print("\n=== PARAGRAPHES EXTRAITS ===\n")
+    for i, item in enumerate(collected_items, 1):
+        print(f"[{i}] {item['title']}")
+        print(item["paragraph"])
+        print()
 
-    if not combined.strip():
-        print("\nAucun contenu récupéré, analyse IA ignorée.")
+    if not collected_items:
+        print("Aucun contenu récupéré, analyse IA ignorée.")
         return
+
+    ai_input = build_ai_input(collected_items)
 
     print("\n=== ANALYSE IA ===\n")
-    result = analyze_trades(combined, market="US")
-    print(result)
+    result = analyze_trades(ai_input, market="US")
+
+    print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
