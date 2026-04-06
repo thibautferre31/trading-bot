@@ -5,12 +5,14 @@ from email.mime.multipart import MIMEMultipart
 
 
 def send_email(subject, body):
-    sender = os.getenv("GMAIL_SENDER")
-    app_password = os.getenv("GMAIL_APP_PASSWORD")
-    recipient = os.getenv("GMAIL_RECIPIENT")
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_port = int(os.getenv("SMTP_PORT", "465"))
+    sender = os.getenv("SMTP_SENDER")
+    password = os.getenv("SMTP_PASSWORD")
+    recipient = os.getenv("SMTP_RECIPIENT")
 
-    if not sender or not app_password or not recipient:
-        print("Variables d'environnement email manquantes.")
+    if not smtp_host or not sender or not password or not recipient:
+        print("Variables SMTP manquantes.")
         return
 
     msg = MIMEMultipart()
@@ -21,9 +23,8 @@ def send_email(subject, body):
     msg.attach(MIMEText(body, "plain", "utf-8"))
 
     try:
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.starttls()
-            server.login(sender, app_password)
+        with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+            server.login(sender, password)
             server.sendmail(sender, recipient, msg.as_string())
 
         print(f"Email envoyé à {recipient}")
