@@ -235,6 +235,7 @@ def build_ai_input(items):
 
 def run():
     print("=== RUN US ===")
+    send_email("Test", "Hello depuis GitHub Actions")
 
     articles = get_articles(limit=10)
     print(f"{len(articles)} articles filtrés trouvés")
@@ -272,7 +273,13 @@ def run():
     print("\n=== ANALYSE IA ===\n")
     result = analyze_trades(ai_input, market="US")
 
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    formatted_result = json.dumps(result, ensure_ascii=False, indent=2)
+    print(formatted_result)
+
+    subject = "Trading Bot US - Analyse IA"
+    body = f"Résultat de l'analyse IA :\n\n{formatted_result}"
+
+    send_email(subject, body)
 
 
 if __name__ == "__main__":
