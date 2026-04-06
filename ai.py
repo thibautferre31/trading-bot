@@ -25,7 +25,7 @@ Ta mission :
 - identifier l'action concernée
 - identifier le ticker si présent ou clairement déductible
 - déterminer si le signal est bullish, bearish ou neutral
-- donner un score de confiance entre 0 et 1
+- donner un score de confiance entre 0 et 100 (100 = conviction très forte)
 - donner une raison courte
 - recopier le titre source
 - recopier le paragraphe source utilisé
@@ -97,7 +97,27 @@ Voici les articles :
         if cleaned.endswith("```"):
             cleaned = cleaned[:-3].strip()
         
-        return json.loads(cleaned)
+        results = json.loads(cleaned)
+
+        for item in results:
+            raw_conf = item.get("confidence", 0)
+        
+            try:
+                conf = float(raw_conf)
+            except:
+                conf = 0
+        
+            # Si l'IA renvoie encore un score entre 0 et 1, on le convertit en 0-100
+            if 0 <= conf <= 1:
+                conf = conf * 100
+        
+            conf = int(round(conf))
+            conf = max(0, min(100, conf))
+            item["confidence"] = conf
+        
+        results = sorted(results, key=lambda x: x.get("confidence", 0), reverse=True)
+        
+        return results
 
     except Exception as e:
         print(f"Erreur API : {e}")
