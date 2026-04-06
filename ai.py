@@ -82,11 +82,22 @@ Voici les articles :
 
         data = response.json()
         content = data["choices"][0]["message"]["content"]
-
+        
         print("Réponse brute IA :")
         print(content)
-
-        return json.loads(content)
+        
+        cleaned = content.strip()
+        
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[len("```json"):].strip()
+        
+        if cleaned.startswith("```"):
+            cleaned = cleaned[len("```"):].strip()
+        
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3].strip()
+        
+        return json.loads(cleaned)
 
     except Exception as e:
         print(f"Erreur API : {e}")
