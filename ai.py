@@ -30,6 +30,26 @@ Ta mission :
 - recopier le titre source
 - recopier le paragraphe source utilisé
 
+Tu dois raisonner non seulement à partir du contenu fourni, mais aussi en tenant compte du contexte actuel :
+- contexte macroéconomique
+- contexte de marché
+- contexte géopolitique
+- dynamique sectorielle de l'entreprise concernée
+- sensibilité potentielle du secteur aux événements actuels
+
+Exemples de raisonnement attendus :
+- une recommandation positive sur une compagnie aérienne peut être affaiblie par un contexte géopolitique tendu, une hausse du pétrole, ou une aversion au risque
+- une recommandation negative sur une valeur du petrole peut être renforcée par un contexte mondial incertain du a la guerre ou autre
+
+Le champ "reason" doit être précis et détaillé.
+Il doit expliquer :
+1. ce que dit l'article ou la recommandation
+2. pourquoi cela est bullish, bearish ou neutral
+3. comment le contexte actuel du marché, du monde et du secteur influence l'interprétation
+4. pourquoi le score de confiance est élevé ou faible
+
+Le champ "reason" doit faire au minimum 2 phrases complètes si un cas exploitable est trouvé.
+
 Réponds uniquement en JSON valide.
 Retourne une liste JSON.
 Chaque élément doit respecter exactement cette structure :
@@ -49,12 +69,19 @@ Règles :
 - Ne pose jamais de question
 - N'ajoute aucun texte hors JSON
 - Si le ticker n'est pas certain, mets le nom de l'action ou "UNKNOWN"
-- Si aucun article exploitable n'est trouvé, retourne []
-- Le champ paragraph doit contenir le paragraphe source correspondant
-- Le champ title doit contenir le titre source correspondant
+- Si aucun bloc exploitable n'est trouvé, retourne []
+- Le champ paragraph doit contenir exactement le texte source correspondant
+- Le champ title doit contenir exactement le titre source correspondant
+- Le champ reason doit être concret, spécifique et relié au contenu source
+- N'utilise pas de formules vagues comme "contexte mitigé" sans expliquer pourquoi
+- Si le contexte sectoriel ou macro réduit la qualité du signal, baisse la confiance
+- Si le contexte sectoriel ou macro renforce le signal, augmente la confiance
+- N'invente pas de ticker précis si tu n'es pas sûr
+- Ne fais pas semblant d'avoir une donnée en temps réel ultra précise non fournie ; utilise une compréhension générale et actuelle du contexte macro, géopolitique, sectoriel et boursier
 
-Voici les articles :
+Voici les contenus :
 {text}
+"""
 """
 
     payload = {
