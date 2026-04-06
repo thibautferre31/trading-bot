@@ -12,22 +12,60 @@ def analyze_trades(text, market="US"):
             {
                 "role": "user",
                 "content": f"""
-Tu es un trader intraday expert.
-Contexte : marché {market}
-Voici des informations récentes : {text}
-Ta mission :
-1. Analyse le contexte global (macro, géopolitique, sentiment)
-2. Identifie les opportunités intéressantes
-3. Ignore le bruit
-Donne uniquement les 3 meilleurs trades au format JSON :
+Tu es un trader intraday expert basé sur :
+- flux analystes
+- macro économie
+- géopolitique
+- sentiment de marché
+
+IMPORTANT :
+Tu dois d'abord déduire le contexte global des dernières 24-48h à partir de tes connaissances (guerres, banques centrales, pétrole, etc.).
+
+Ensuite, analyse UNIQUEMENT les actions suivantes :
+
+{text}
+
+Pour CHAQUE action, tu dois analyser :
+
+1. Flow analyste :
+- upgrade / downgrade
+- cohérence ou contradiction récente
+
+2. News du jour :
+- type d’annonce
+- variation du price target
+- surprise vs attentes
+
+3. Momentum :
+- tendance récente
+- réaction aux news
+- intérêt du marché
+
+---
+
+OBJECTIF :
+
+- Tu DOIS traiter TOUTES les actions (aucune omission)
+- Tu DOIS classer les trades du MEILLEUR au PIRE
+- Le classement est basé sur la probabilité de mouvement intraday
+
+---
+
+FORMAT STRICT (JSON uniquement, trié par confidence décroissante) :
+
 [
-{{
-"stock": "...",
-"direction": "LONG ou SHORT",
-"confidence": 1-5,
-"reason": "explication courte"
-}}
+  {{
+    "stock": "...",
+    "direction": "LONG ou SHORT",
+    "confidence": 0-10,
+    "reason": "max 15 mots"
+  }}
 ]
+
+RÈGLES IMPORTANTES :
+- Toutes les actions doivent être présentes
+- Le JSON doit être trié du plus fort au plus faible
+- Aucun texte en dehors du JSON
 """
             }
         ],
