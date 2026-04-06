@@ -5,6 +5,9 @@ import os
 API_KEY = os.getenv("ROUTE_LLM_API_KEY")
 URL = "https://routellm.abacus.ai/v1/chat/completions"
 
+if not API_KEY:
+    raise ValueError("❌ ROUTE_LLM_API_KEY manquante")
+
 def analyze_trades(text, market="US"):
     payload = {
         "model": "gpt-5",
@@ -72,11 +75,25 @@ RÈGLES IMPORTANTES :
         "stream": False
     }
 
-    headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
-    response = requests.post(URL, headers=headers, data=json.dumps(payload))
-    data = response.json()
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
 
     try:
-        return data["choices"][0]["message"]["content"]
-    except:
-        return str(data)
+        response = requests.post(URL, headers=headers, data=json.dumps(payload), timeout=30)
+        data = response.json()
+
+        content = data["choices"][0]["message"]["content"].strip()
+
+        # Nettoyage JSON
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+
+        return content.strip()
+
+    except Exception as e:
+        print("Erreur API :", e)
+        return "[]"
