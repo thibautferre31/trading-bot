@@ -29,6 +29,7 @@ def create_driver(user_agent=None):
         user_agent = random.choice(USER_AGENTS)
 
     options = Options()
+    options.page_load_strategy = "eager"
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
