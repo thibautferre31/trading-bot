@@ -3,7 +3,7 @@ name: Trading Bot Europe Test
 on:
   workflow_dispatch:
   schedule:
-    - cron: "30 6 * * *"
+    - cron: "40 6 * * *"
 jobs:
   run-europe-bot:
     runs-on: ubuntu-latest
