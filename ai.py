@@ -82,7 +82,6 @@ Règles :
 Voici les contenus :
 {text}
 """
-"""
 
     payload = {
         "model": "route-llm",
