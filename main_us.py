@@ -12,24 +12,33 @@ URLS = {
 
 
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.5',
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.marketbeat.com/",
+    "Connection": "keep-alive",
 }
 
 
 def fetch_page(url):
-    try:
-        response = requests.get(url, headers=HEADERS, timeout=30)
-        response.raise_for_status()
+    session = requests.Session()
 
-        print(f"✓ Page récupérée : {url}")
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.marketbeat.com/"
+    })
 
-        return response.text
+    # hit homepage first (important)
+    session.get("https://www.marketbeat.com/")
 
-    except Exception as e:
-        print(f"Erreur fetch : {e}")
+    response = session.get(url, timeout=30)
+
+    if response.status_code != 200:
+        print(f"Erreur HTTP : {response.status_code}")
         return None
+
+    return response.text
 
 
 def parse_table(html):
