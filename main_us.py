@@ -1,9 +1,4 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-
+import requests
 from bs4 import BeautifulSoup
 import time
 
@@ -16,90 +11,57 @@ URLS = {
 }
 
 
-def create_driver():
-    options = Options()
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1920,1080")
-
-    driver = webdriver.Chrome(options=options)
-    driver.set_page_load_timeout(30)
-
-    return driver
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.5',
+}
 
 
-def find_best_table(soup):
-    tables = soup.find_all("table")
+def fetch_page(url):
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=30)
+        response.raise_for_status()
 
-    best_table = None
-    max_rows = 0
+        print(f"✓ Page récupérée : {url}")
 
-    for table in tables:
-        tbody = table.find("tbody")
-        if not tbody:
+        return response.text
+
+    except Exception as e:
+        print(f"Erreur fetch : {e}")
+        return None
+
+
+def parse_table(html):
+    soup = BeautifulSoup(html, "lxml")
+
+    # même logique que ton gars → flexible
+    table = soup.find("table", {"class": "scroll-table"}) or soup.find("table")
+
+    if not table:
+        print("❌ Table introuvable")
+        return []
+
+    print("✓ Table trouvée")
+
+    rows_data = []
+
+    tbody = table.find("tbody") or table
+    rows = tbody.find_all("tr")
+
+    for row in rows:
+        cells = row.find_all("td")
+
+        if len(cells) < 3:
             continue
 
-        rows = tbody.find_all("tr")
+        row_text = [td.get_text(" ", strip=True) for td in cells]
 
-        if len(rows) > max_rows:
-            max_rows = len(rows)
-            best_table = table
+        rows_data.append(row_text)
 
-    return best_table
+    print(f"✓ {len(rows_data)} lignes extraites")
 
-
-def get_table_data(url):
-    driver = create_driver()
-
-    try:
-        print(f"Chargement : {url}")
-        driver.get(url)
-
-        # attendre que la page charge
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.TAG_NAME, "body"))
-        )
-
-        # scroll pour déclencher le chargement JS
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(3)
-
-        soup = BeautifulSoup(driver.page_source, "html.parser")
-
-        tables = soup.find_all("table")
-        print(f"Tables trouvées : {len(tables)}")
-
-        if not tables:
-            print("⚠️ Aucune table trouvée → debug.html généré")
-            with open("debug.html", "w", encoding="utf-8") as f:
-                f.write(driver.page_source)
-            return []
-
-        table = find_best_table(soup)
-
-        if not table:
-            print("⚠️ Aucune table exploitable trouvée")
-            return []
-
-        tbody = table.find("tbody")
-        if not tbody:
-            print("⚠️ Pas de tbody trouvé")
-            return []
-
-        rows = []
-
-        for tr in tbody.find_all("tr"):
-            cols = tr.find_all("td")
-            row = [td.get_text(" ", strip=True) for td in cols]
-
-            if row:
-                rows.append(row)
-
-        return rows
-
-    finally:
-        driver.quit()
+    return rows_data
 
 
 def format_table(rows, title):
@@ -108,7 +70,7 @@ def format_table(rows, title):
 
     text = f"=== {title} ===\n\n"
 
-    for row in rows:
+    for row in rows[:50]:  # limite pour email
         text += " | ".join(row) + "\n"
 
     text += "\n"
@@ -116,27 +78,22 @@ def format_table(rows, title):
 
 
 def run():
-    print("=== MARKETBEAT SCRAPER ===")
+    print("=== MARKETBEAT SCRAPER (REQUESTS) ===")
 
-    upgrades = get_table_data(URLS["UPGRADES"])
-    downgrades = get_table_data(URLS["DOWNGRADES"])
+    upgrades_html = fetch_page(URLS["UPGRADES"])
+    downgrades_html = fetch_page(URLS["DOWNGRADES"])
 
-    print(f"{len(upgrades)} upgrades récupérés")
-    print(f"{len(downgrades)} downgrades récupérés")
+    if not upgrades_html or not downgrades_html:
+        print("❌ Impossible de récupérer les pages")
+        return
+
+    upgrades = parse_table(upgrades_html)
+    downgrades = parse_table(downgrades_html)
 
     body = ""
     body += format_table(upgrades, "UPGRADES")
     body += format_table(downgrades, "DOWNGRADES")
-
-    subject = "MarketBeat - Upgrades & Downgrades"
-
-    # éviter erreur SMTP 421
-    time.sleep(5)
-
-    send_email(subject, body)
-
-    print("Email envoyé ✅")
-
+    print(body)
 
 if __name__ == "__main__":
     run()
