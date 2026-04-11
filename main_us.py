@@ -25,7 +25,7 @@ def create_driver():
     return driver
 
 
-def get_table_data(url):
+ddef get_table_data(url):
     driver = create_driver()
 
     try:
@@ -35,9 +35,10 @@ def get_table_data(url):
 
         soup = BeautifulSoup(driver.page_source, "html.parser")
 
-        table = soup.find("table", class_="scroll-table sort-table fixed-header")
+        table = find_best_table(soup)
+
         if not table:
-            print("Table non trouvée")
+            print("Aucune table trouvée")
             return []
 
         tbody = table.find("tbody")
@@ -58,7 +59,6 @@ def get_table_data(url):
 
     finally:
         driver.quit()
-
 
 def format_table(rows, title):
     if not rows:
