@@ -1,8 +1,12 @@
+import time
+import re
+import json
+
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
-import time
-import re
+
+from ai import analyze_marketbeat
 
 
 URLS = {
@@ -12,11 +16,9 @@ URLS = {
 
 
 # -----------------------------
-# SELENIUM FETCH
+# SELENIUM DRIVER
 # -----------------------------
-def fetch_page_selenium(url):
-    print(f"\nLoading: {url}")
-
+def create_driver():
     options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
@@ -26,10 +28,16 @@ def fetch_page_selenium(url):
         "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36"
     )
 
-    driver = webdriver.Chrome(options=options)
+    return webdriver.Chrome(options=options)
+
+
+def fetch_page(url):
+    driver = create_driver()
 
     try:
+        print(f"\nLoading: {url}")
         driver.get(url)
+
         time.sleep(6)
 
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
@@ -42,19 +50,17 @@ def fetch_page_selenium(url):
 
 
 # -----------------------------
-# PARSING TABLE
+# PARSER
 # -----------------------------
 def parse_table(html):
     soup = BeautifulSoup(html, "html.parser")
 
     table = soup.find("table")
     if not table:
-        print("❌ Table not found")
         return []
 
     tbody = table.find("tbody")
     if not tbody:
-        print("❌ tbody not found")
         return []
 
     rows = []
@@ -66,90 +72,39 @@ def parse_table(html):
             continue
 
         row = [c.get_text(" ", strip=True) for c in cols]
-        rows.append(row)
+
+        # conversion en dict structuré
+        structured = normalize_row(row)
+        if structured:
+            rows.append(structured)
 
     return rows
 
 
 # -----------------------------
-# CLEANING HELPERS
+# NORMALISATION ROW
 # -----------------------------
-def clean_row(row):
+def normalize_row(row):
     """
-    enlève colonnes inutiles (comme demandé)
-    on garde :
-    ticker, name, analyst, price, price target, rating
+    transforme row brut en dict exploitable par AI
     """
-    if len(row) < 6:
-        return row
 
-    return [row[0], row[1], row[2], row[-3], row[-2], row[-1]]
+    try:
+        ticker_name = row[0].split(" ", 1)
+        ticker = ticker_name[0]
+        name = ticker_name[1] if len(ticker_name) > 1 else ""
 
+        return {
+            "ticker": ticker,
+            "name": name,
+            "analyst": row[1] if len(row) > 1 else "",
+            "price": row[-3] if len(row) >= 3 else "",
+            "price_target": row[-2] if len(row) >= 2 else "",
+            "rating": row[-1] if len(row) >= 1 else ""
+        }
 
-def is_strong_buy(row):
-    return "strong buy" in " ".join(row).lower()
-
-
-def extract_price_target_diff(row):
-    """
-    extrait diff entre prix cible si format "x ➝ y"
-    """
-    text = row[-2]
-
-    nums = re.findall(r"\$?(\d+\.?\d*)", text)
-
-    if len(nums) >= 2:
-        return float(nums[1]) - float(nums[0])
-    elif len(nums) == 1:
-        return float(nums[0])
-
-    return 0
-
-
-# -----------------------------
-# UPGRADES PROCESS
-# -----------------------------
-def process_upgrades(rows):
-    cleaned = []
-
-    for r in rows:
-        c = clean_row(r)
-
-        cleaned.append({
-            "row": c,
-            "strong": is_strong_buy(c),
-            "upside": extract_price_target_diff(c)
-        })
-
-    # TRI :
-    # 1. Strong Buy en haut
-    # 2. plus gros upside ensuite
-    cleaned.sort(key=lambda x: (
-        not x["strong"],
-        -x["upside"]
-    ))
-
-    return cleaned
-
-
-# -----------------------------
-# DOWNGRADES PROCESS
-# -----------------------------
-def process_downgrades(rows):
-    cleaned = []
-
-    for r in rows:
-        c = clean_row(r)
-
-        cleaned.append({
-            "row": c,
-            "downside": extract_price_target_diff(c)
-        })
-
-    # plus mauvais en haut
-    cleaned.sort(key=lambda x: x["downside"])
-
-    return cleaned
+    except:
+        return None
 
 
 # -----------------------------
@@ -158,31 +113,67 @@ def process_downgrades(rows):
 def display(title, data):
     print(f"\n=== {title} ===\n")
 
-    for item in data:
-        print(" | ".join(item["row"]))
-        print()
+    for x in data[:10]:
+        print(
+            x.get("ticker"),
+            "|",
+            x.get("rating"),
+            "|",
+            x.get("price"),
+            "|",
+            x.get("price_target"),
+            "|",
+            x.get("market_cap")
+        )
 
 
 # -----------------------------
 # MAIN
 # -----------------------------
 def run():
-    print("=== MARKETBEAT FULL SCRAPER ===")
+    print("=== MARKETBEAT FULL PIPELINE ===")
 
-    upgrades_html = fetch_page_selenium(URLS["UPGRADES"])
-    downgrades_html = fetch_page_selenium(URLS["DOWNGRADES"])
+    # -------------------------
+    # SCRAPING
+    # -------------------------
+    upgrades_html = fetch_page(URLS["UPGRADES"])
+    downgrades_html = fetch_page(URLS["DOWNGRADES"])
 
-    upgrades_rows = parse_table(upgrades_html)
-    downgrades_rows = parse_table(downgrades_html)
+    upgrades = parse_table(upgrades_html)
+    downgrades = parse_table(downgrades_html)
 
-    print(f"\nUpgrades: {len(upgrades_rows)} lignes")
-    print(f"Downgrades: {len(downgrades_rows)} lignes")
+    print(f"\nRaw upgrades: {len(upgrades)}")
+    print(f"Raw downgrades: {len(downgrades)}")
 
-    upgrades = process_upgrades(upgrades_rows)
-    downgrades = process_downgrades(downgrades_rows)
+    if not upgrades and not downgrades:
+        print("No data scraped")
+        return
 
-    display("UPGRADES SORTED", upgrades)
-    display("DOWNGRADES SORTED", downgrades)
+    # -------------------------
+    # AI PROCESSING
+    # -------------------------
+    result = analyze_marketbeat(upgrades, downgrades)
+
+    # -------------------------
+    # DISPLAY RESULTS
+    # -------------------------
+    print("\n============================")
+    print("FINAL SORTED UPGRADES")
+    print("============================")
+
+    display("UPGRADES", result["upgrades"])
+
+    print("\n============================")
+    print("FINAL SORTED DOWNGRADES")
+    print("============================")
+
+    display("DOWNGRADES", result["downgrades"])
+
+    # -------------------------
+    # JSON OUTPUT
+    # -------------------------
+    print("\n=== FULL JSON OUTPUT ===\n")
+    print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
