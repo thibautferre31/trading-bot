@@ -25,7 +25,7 @@ def create_driver():
     return driver
 
 
-ddef get_table_data(url):
+def get_table_data(url):
     driver = create_driver()
 
     try:
