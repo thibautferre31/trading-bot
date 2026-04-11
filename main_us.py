@@ -11,10 +11,9 @@ URLS = {
 }
 
 
-# =========================
-# SELENIUM SCRAPER
-# =========================
-
+# -----------------------------
+# SELENIUM FETCH
+# -----------------------------
 def fetch_page_selenium(url):
     print(f"\nLoading: {url}")
 
@@ -24,7 +23,7 @@ def fetch_page_selenium(url):
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
+        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36"
     )
 
     driver = webdriver.Chrome(options=options)
@@ -42,19 +41,20 @@ def fetch_page_selenium(url):
         driver.quit()
 
 
-# =========================
-# PARSING RAW TABLE
-# =========================
-
-def parse_raw_table(html):
+# -----------------------------
+# PARSING TABLE
+# -----------------------------
+def parse_table(html):
     soup = BeautifulSoup(html, "html.parser")
 
     table = soup.find("table")
     if not table:
+        print("❌ Table not found")
         return []
 
     tbody = table.find("tbody")
     if not tbody:
+        print("❌ tbody not found")
         return []
 
     rows = []
@@ -62,7 +62,7 @@ def parse_raw_table(html):
     for tr in tbody.find_all("tr"):
         cols = tr.find_all("td")
 
-        if len(cols) < 5:
+        if len(cols) < 3:
             continue
 
         row = [c.get_text(" ", strip=True) for c in cols]
@@ -71,123 +71,118 @@ def parse_raw_table(html):
     return rows
 
 
-# =========================
-# CLEANING + FEATURE ENGINEERING
-# =========================
+# -----------------------------
+# CLEANING HELPERS
+# -----------------------------
+def clean_row(row):
+    """
+    enlève colonnes inutiles (comme demandé)
+    on garde :
+    ticker, name, analyst, price, price target, rating
+    """
+    if len(row) < 6:
+        return row
 
-def extract_price(price_str):
-    match = re.search(r"[\d,.]+", price_str)
-    return float(match.group().replace(",", "")) if match else None
-
-
-def extract_target(target_str):
-    if not target_str:
-        return None
-
-    nums = re.findall(r"[\d,.]+", target_str)
-    if not nums:
-        return None
-
-    return float(nums[-1].replace(",", ""))
+    return [row[0], row[1], row[2], row[-3], row[-2], row[-1]]
 
 
-def clean_rows(rows):
+def is_strong_buy(row):
+    return "strong buy" in " ".join(row).lower()
+
+
+def extract_price_target_diff(row):
+    """
+    extrait diff entre prix cible si format "x ➝ y"
+    """
+    text = row[-2]
+
+    nums = re.findall(r"\$?(\d+\.?\d*)", text)
+
+    if len(nums) >= 2:
+        return float(nums[1]) - float(nums[0])
+    elif len(nums) == 1:
+        return float(nums[0])
+
+    return 0
+
+
+# -----------------------------
+# UPGRADES PROCESS
+# -----------------------------
+def process_upgrades(rows):
     cleaned = []
 
     for r in rows:
-        if len(r) < 5:
-            continue
-
-        ticker = r[0]
-        upgraded_by = r[1]
-        analyst = r[2]
-        price_str = r[3]
-        target_str = r[4] if len(r) > 4 else ""
-        rating = r[-1]
-
-        current_price = extract_price(price_str)
-        price_target = extract_target(target_str)
-
-        if not price_target:
-            price_target = current_price
-
-        gap = price_target - current_price if current_price else 0
+        c = clean_row(r)
 
         cleaned.append({
-            "ticker": ticker,
-            "upgraded_by": upgraded_by,
-            "analyst": analyst,
-            "current_price": current_price,
-            "price_target": price_target,
-            "rating": rating,
-            "gap": gap
+            "row": c,
+            "strong": is_strong_buy(c),
+            "upside": extract_price_target_diff(c)
         })
+
+    # TRI :
+    # 1. Strong Buy en haut
+    # 2. plus gros upside ensuite
+    cleaned.sort(key=lambda x: (
+        not x["strong"],
+        -x["upside"]
+    ))
 
     return cleaned
 
 
-# =========================
-# SORTING LOGIC
-# =========================
+# -----------------------------
+# DOWNGRADES PROCESS
+# -----------------------------
+def process_downgrades(rows):
+    cleaned = []
 
-def sort_upgrades(data):
-    def score(x):
-        strong_buy_bonus = 1000 if "Strong-Buy" in x["rating"] or "Strong Buy" in x["rating"] else 0
-        return strong_buy_bonus + x["gap"]
+    for r in rows:
+        c = clean_row(r)
 
-    return sorted(data, key=score, reverse=True)
+        cleaned.append({
+            "row": c,
+            "downside": extract_price_target_diff(c)
+        })
+
+    # plus mauvais en haut
+    cleaned.sort(key=lambda x: x["downside"])
+
+    return cleaned
 
 
-def sort_downgrades(data):
-    return sorted(data, key=lambda x: x["gap"], reverse=True)
-
-
-# =========================
+# -----------------------------
 # DISPLAY
-# =========================
+# -----------------------------
+def display(title, data):
+    print(f"\n=== {title} ===\n")
 
-def display(data, title):
-    print(f"\n==================== {title} ====================\n")
-
-    for d in data:
-        print(
-            f"{d['ticker']} | "
-            f"{d['rating']} | "
-            f"{d['current_price']} → {d['price_target']} | "
-            f"gap: {round(d['gap'], 2)}"
-        )
+    for item in data:
+        print(" | ".join(item["row"]))
+        print()
 
 
-# =========================
+# -----------------------------
 # MAIN
-# =========================
-
+# -----------------------------
 def run():
+    print("=== MARKETBEAT FULL SCRAPER ===")
 
-    print("=== MARKETBEAT FULL PIPELINE ===")
-
-    # SCRAPE
     upgrades_html = fetch_page_selenium(URLS["UPGRADES"])
     downgrades_html = fetch_page_selenium(URLS["DOWNGRADES"])
 
-    # PARSE
-    upgrades_raw = parse_raw_table(upgrades_html)
-    downgrades_raw = parse_raw_table(downgrades_html)
+    upgrades_rows = parse_table(upgrades_html)
+    downgrades_rows = parse_table(downgrades_html)
 
-    print(f"\nRaw upgrades: {len(upgrades_raw)}")
-    print(f"Raw downgrades: {len(downgrades_raw)}")
+    print(f"\nUpgrades: {len(upgrades_rows)} lignes")
+    print(f"Downgrades: {len(downgrades_rows)} lignes")
 
-    # CLEAN
-    upgrades = clean_rows(upgrades_raw)
-    downgrades = clean_rows(downgrades_raw)
+    upgrades = process_upgrades(upgrades_rows)
+    downgrades = process_downgrades(downgrades_rows)
 
-    # SORT
-    upgrades_sorted = sort_upgrades(upgrades)
-    downgrades_sorted = sort_downgrades(downgrades)
-
-    # DISPLAY
-    display(upgrades_sorted, "UPGRADES (SORTED)")
-    display(downgrades_sorted, "DOWNGRADES (SORTED)")
+    display("UPGRADES SORTED", upgrades)
+    display("DOWNGRADES SORTED", downgrades)
 
 
 if __name__ == "__main__":
