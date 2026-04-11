@@ -44,7 +44,7 @@ def fetch_page_selenium(url):
 
 
 def parse_marketbeat_table(html):
-    soup = BeautifulSoup(html, "lxml")
+    soup = BeautifulSoup(html, "html.parser")
 
     table = soup.find("table")
 
