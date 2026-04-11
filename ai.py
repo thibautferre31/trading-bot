@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+import re
 
 API_KEY = os.getenv("ROUTE_LLM_API_KEY")
 
@@ -148,3 +149,91 @@ Voici les contenus :
     except Exception as e:
         print(f"Erreur API : {e}")
         return []
+
+# -----------------------------
+# helpers
+# -----------------------------
+def extract_float(value):
+    if not value:
+        return None
+    match = re.findall(r"\$?(\d+\.?\d*)", str(value))
+    return float(match[0]) if match else None
+
+
+def compute_diff(price, target):
+    if price is None or target is None:
+        return 0
+    return target - price
+
+
+def is_strong_buy(row):
+    return "strong buy" in str(row.get("rating", "")).lower()
+
+
+def fetch_market_cap(ticker):
+    try:
+        url = f"https://www.marketbeat.com/stocks/{ticker}/"
+        r = requests.get(url, timeout=10)
+
+        if r.status_code != 200:
+            return None
+
+        match = re.search(r"Market Cap</td><td[^>]*>(.*?)</td>", r.text)
+
+        return match.group(1).strip() if match else None
+
+    except:
+        return None
+
+
+# -----------------------------
+# SINGLE MAIN FUNCTION
+# -----------------------------
+def analyze_marketbeat(upgrades, downgrades):
+    """
+    INPUT:
+        upgrades = list[dict]
+        downgrades = list[dict]
+
+    OUTPUT:
+        dict sorted + enriched
+    """
+
+    # ======================
+    # UPGRADES
+    # ======================
+    for u in upgrades:
+        price = extract_float(u.get("price"))
+        target = extract_float(u.get("price_target"))
+
+        u["diff"] = compute_diff(price, target)
+        u["strong"] = is_strong_buy(u)
+        u["market_cap"] = fetch_market_cap(u.get("ticker"))
+
+    upgrades_sorted = sorted(
+        upgrades,
+        key=lambda x: (
+            not x["strong"],   # strong buy first
+            -x["diff"]         # then upside
+        )
+    )
+
+    # ======================
+    # DOWNGRADES
+    # ======================
+    for d in downgrades:
+        price = extract_float(d.get("price"))
+        target = extract_float(d.get("price_target"))
+
+        d["diff"] = compute_diff(price, target)
+        d["market_cap"] = fetch_market_cap(d.get("ticker"))
+
+    downgrades_sorted = sorted(
+        downgrades,
+        key=lambda x: x["diff"]
+    )
+
+    return {
+        "upgrades": upgrades_sorted,
+        "downgrades": downgrades_sorted
+    }
