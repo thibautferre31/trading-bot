@@ -1,10 +1,14 @@
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
 from bs4 import BeautifulSoup
 import time
-import json
 
 from email_utils import send_email
+
 
 URLS = {
     "UPGRADES": "https://www.marketbeat.com/ratings/upgrades/",
@@ -23,6 +27,7 @@ def create_driver():
     driver.set_page_load_timeout(30)
 
     return driver
+
 
 def find_best_table(soup):
     tables = soup.find_all("table")
@@ -43,25 +48,43 @@ def find_best_table(soup):
 
     return best_table
 
+
 def get_table_data(url):
     driver = create_driver()
 
     try:
         print(f"Chargement : {url}")
         driver.get(url)
-        time.sleep(5)
+
+        # attendre que la page charge
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.TAG_NAME, "body"))
+        )
+
+        # scroll pour déclencher le chargement JS
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(3)
 
         soup = BeautifulSoup(driver.page_source, "html.parser")
+
+        tables = soup.find_all("table")
+        print(f"Tables trouvées : {len(tables)}")
+
+        if not tables:
+            print("⚠️ Aucune table trouvée → debug.html généré")
+            with open("debug.html", "w", encoding="utf-8") as f:
+                f.write(driver.page_source)
+            return []
 
         table = find_best_table(soup)
 
         if not table:
-            print("Aucune table trouvée")
+            print("⚠️ Aucune table exploitable trouvée")
             return []
 
         tbody = table.find("tbody")
         if not tbody:
-            print("tbody non trouvé")
+            print("⚠️ Pas de tbody trouvé")
             return []
 
         rows = []
@@ -78,6 +101,7 @@ def get_table_data(url):
     finally:
         driver.quit()
 
+
 def format_table(rows, title):
     if not rows:
         return f"{title} : Aucun résultat\n\n"
@@ -87,7 +111,7 @@ def format_table(rows, title):
     for row in rows:
         text += " | ".join(row) + "\n"
 
-    text += "\n\n"
+    text += "\n"
     return text
 
 
@@ -105,6 +129,9 @@ def run():
     body += format_table(downgrades, "DOWNGRADES")
 
     subject = "MarketBeat - Upgrades & Downgrades"
+
+    # éviter erreur SMTP 421
+    time.sleep(5)
 
     send_email(subject, body)
 
