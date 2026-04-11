@@ -24,6 +24,24 @@ def create_driver():
 
     return driver
 
+def find_best_table(soup):
+    tables = soup.find_all("table")
+
+    best_table = None
+    max_rows = 0
+
+    for table in tables:
+        tbody = table.find("tbody")
+        if not tbody:
+            continue
+
+        rows = tbody.find_all("tr")
+
+        if len(rows) > max_rows:
+            max_rows = len(rows)
+            best_table = table
+
+    return best_table
 
 def get_table_data(url):
     driver = create_driver()
