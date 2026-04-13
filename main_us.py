@@ -2,7 +2,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
 import time
-
+from email_utils import send_email
 
 URLS = {
     "UPGRADES": "https://www.marketbeat.com/ratings/upgrades/",
@@ -83,6 +83,16 @@ def display(rows, title):
     for r in rows[:30]:
         print(" | ".join(r))
 
+def format_section(title, rows, max_rows=10):
+    text = f"\n=== {title} ===\n\n"
+
+    if not rows:
+        return text + "Aucune donnée\n"
+
+    for r in rows[:max_rows]:
+        text += " | ".join(r) + "\n"
+
+    return text
 
 def run():
     print("=== MARKETBEAT SCRAPER (SELENIUM ADAPTED) ===")
@@ -99,6 +109,14 @@ def run():
     display(upgrades, "UPGRADES")
     display(downgrades, "DOWNGRADES")
 
+    subject = "Trading Bot US - Analyse"
+
+    body = ""
+    body += format_section("UPGRADES", upgrades)
+    body += "\n"
+    body += format_section("DOWNGRADES", downgrades)
+    
+    send_email(subject, body)
 
 if __name__ == "__main__":
     run()
