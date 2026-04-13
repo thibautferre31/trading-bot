@@ -112,9 +112,14 @@ def run():
     subject = "Trading Bot US - Analyse"
 
     body = ""
-    body += upgrades
-    body += "\n"
-    body += downgrades
+
+    body += "UPGRADES\n"
+    body += "\n".join([" | ".join(row) for row in upgrades])
+    
+    body += "\n\n"
+    
+    body += "DOWNGRADES\n"
+    body += "\n".join([" | ".join(row) for row in downgrades])
     
     print(body)
 
