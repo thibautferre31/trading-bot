@@ -112,11 +112,11 @@ def run():
     subject = "Trading Bot US - Analyse"
 
     body = ""
-    body += format_section("UPGRADES", upgrades)
+    body += upgrades
     body += "\n"
-    body += format_section("DOWNGRADES", downgrades)
+    body += downgrades
     
-    send_email(subject, body)
+    print(body)
 
 if __name__ == "__main__":
     run()
