@@ -121,7 +121,7 @@ def run():
     body += "DOWNGRADES\n"
     body += "\n".join([" | ".join(row) for row in downgrades])
     
-    print(body)
+    send_email(subject, body)
 
 if __name__ == "__main__":
     run()
